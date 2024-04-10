@@ -1,0 +1,102 @@
+#***********************************************************************
+
+# READING AND ORGANISING MIGRANT PATH DATA 
+#This segment reads the 'Input_Data.csv' file to extract the paths of #migrants. Each migrant's path is a sequence of activities, and these #paths are stored in a dictionary named migrant_paths. Each key in the #dictionary corresponds to a migrant's unique identifier, and the value #is a list of activities that represent their journey.
+
+
+import csv
+
+# Dictionary to hold participant paths
+participant_paths = {}
+
+# Read participant path data from CSV file
+with open('Input_Data.csv', 'r') as csv_file:
+    csv_reader = csv.reader(csv_file)
+    for row in csv_reader:
+        # Filter out empty entries and store the path
+        path = list(filter(('').__ne__, row[1:]))
+        participant_paths[row[0]] = path
+
+#***********************************************************************
+# IDENTIFYING INDIVIDUAL CYCLES IN MIGRANT PATHS
+#The find_cycles function identifies cycles within a migrant's path. It #keeps track of each activity, and when an activity repeats, it marks a #cycle from the activity’s first occurrence to the next occurrence. This #includes cycles within cycles.
+
+# Function to find individual cycles in a participant's path
+def find_cycles(path):
+    cycles = []  # List to store identified cycles
+    activity_index_map = {}  # Map to store last index of each activity
+
+    for idx, activity in enumerate(path):
+        # If activity is repeated, a cycle is identified
+        if activity in activity_index_map:
+            cycle_start_index = activity_index_map[activity]
+            cycle = path[cycle_start_index: idx]
+            cycles.append(cycle)
+        activity_index_map[activity] = idx
+
+    return cycles
+
+#***********************************************************************
+#ORGANISING CYCLES FOR EACH MIGRANT
+#The create_migrant_cycles function processes each participant’s path to #identify cycles using find_cycles and stores these in the #migrant_cycles dictionary.
+
+# Function to create a dictionary of participants and their cycles
+def create_participant_cycles(participant_paths):
+    participant_cycles = {}  # Dictionary to store cycles for each participant
+    for participant_id, path in participant_paths.items():
+        participant_number = participant_id.split('_')[1]
+        cycles = find_cycles(path)
+        participant_cycles['Participant' + participant_number] = cycles
+    return participant_cycles
+
+participant_cycles = create_participant_cycles(participant_paths)
+
+#***********************************************************************
+#FINDING REPRESENTATIVE CYCLES FOR ALL CYCLIC PERMUTATIONS IDENTIFIED
+#The find_existing_cycle function looks for an existing cycle in the #count. Each cycle is concatenated in its doubled form and are then #compared in a normalised continuous string format (separators such as #commas and spaces are removed). For example, ABCA is represented as #ABCABCA (see illustrative cycle in Figure 16). This way, the cycle can #be matched regardless of its starting point in the original path (e.g. #ABCA and BCAB would be recorded as the same A-B-C cycle across the same #or different migrants).
+
+
+# Function to find if a cycle already exists in the count
+def find_existing_cycle(count_cycles, cycle):
+    double_cycles = count_cycles.keys()
+    cycle_string = ''.join(cycle)  # Convert cycle to string for comparison
+
+    for double_cycle in double_cycles:
+        double_cycle_string = double_cycle.replace(',', '').replace(' ', '')
+        if len(double_cycle_string) == (2 * len(cycle_string)):
+            if cycle_string in double_cycle_string:
+                return double_cycle
+    return None
+
+#***********************************************************************
+#COUNTING COMMON CYCLES ACROSS PARTICIPANTS
+#In this step, the create_count_cycles function processes each migrant's #cycles, checks for existing matches in the count, and updates the count #accordingly. It uses the find_existing_cycle function to avoid double #counting. A dictionary, count_cycles, is created where each key is a #unique cycle (in its doubled and normalised form), and the value is a #list of participants who experienced that cycle.
+
+# Function to count the number of cycles for every participant
+def create_count_cycles(participant_cycles):
+    count_cycles = {}  # Dictionary to store count of cycles
+
+    for participant, cycles in participant_cycles.items():
+        for cycle in cycles:
+            existing_cycle = find_existing_cycle(count_cycles, cycle)
+            if existing_cycle is not None:
+                count_cycles[existing_cycle].append(participant)
+            else:
+                # Create a doubled cycle for comparison
+                double_cycle = ', '.join(cycle) + ', ' + ', '.join(cycle)
+                count_cycles[double_cycle] = [participant]
+
+    return count_cycles
+
+count_cycles = create_count_cycles(participant_cycles)
+
+
+#***********************************************************************
+#OUTPUTTING THE RESULTS
+#Finally, this section writes the counted cycles to a CSV file, #'Count_cycles.csv'. Each column in this file represents a unique cycle, #and the rows list the migrants associated with each cycle.
+
+# Write the count of cycles to a CSV file
+with open('Count_cycles.csv', 'w') as f:
+    csv_writer = csv.DictWriter(f, count_cycles.keys())
+    csv_writer.writeheader()
+
